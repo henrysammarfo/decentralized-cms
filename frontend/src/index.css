@@ -1,0 +1,65 @@
+/* frontend/src/index.css */
+@import '@mysten/dapp-kit/dist/index.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+.markdown-editor {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.markdown-preview {
+  line-height: 1.6;
+}
+
+.markdown-preview h1 {
+  @apply text-3xl font-bold mt-6 mb-4;
+}
+
+.markdown-preview h2 {
+  @apply text-2xl font-bold mt-5 mb-3;
+}
+
+.markdown-preview h3 {
+  @apply text-xl font-bold mt-4 mb-2;
+}
+
+.markdown-preview p {
+  @apply mb-4;
+}
+
+.markdown-preview ul, .markdown-preview ol {
+  @apply mb-4 ml-6;
+}
+
+.markdown-preview li {
+  @apply mb-1;
+}
+
+.markdown-preview code {
+  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
+}
+
+.markdown-preview pre {
+  @apply bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.markdown-preview blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic mb-4;
+}
+
+/* Loading spinner */
+.spinner {
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #3498db;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
