@@ -1,4 +1,16 @@
+# dependencies
 node_modules/
+
+# build output
 dist/
+build/
+
+# environment
 .env
+
+# Move build
+.sui/
+
+# OS
 .DS_Store
+Thumbs.db
