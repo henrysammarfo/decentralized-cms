@@ -1,5 +1,6 @@
 [package]
 name = "decentralized-cms"
+edition = "2024"  # Add this line or update existing edition
 version = "0.0.1"
 
 [dependencies]

@@ -11,8 +11,8 @@ const SitePage: React.FC = () => {
   const currentAccount = useCurrentAccount();
   
   const [site, setSite] = useState<any>(null);
-  const [page, setPage] = useState<any>(null);
-  const [pages, setPages] = useState<any[]>([]);
+  const [page, setPage] = useState<unknown>(null);
+  const [pages, setPages] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +79,7 @@ const SitePage: React.FC = () => {
     loadSiteData();
   }, [siteId, slug, currentAccount]);
 
-  const canEdit = (site: any) => {
+  const canEdit = (site: unknown) => {
     if (!currentAccount || !site) return false;
     return site.owner === currentAccount.address || 
            site.admins.includes(currentAccount.address) ||
