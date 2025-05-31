@@ -6,181 +6,568 @@ module decentralized_cms::cms {
     use std::string::{Self, String};
     use std::vector;
     use sui::event;
+    use sui::clock::{Self, Clock};
+    use sui::table::{Self, Table};
+    use sui::bag::{Self, Bag};
 
-    // Error codes
-    const ENotAuthorized: u64 = 1;
-    const EPageNotFound: u64 = 2;
-    const EInvalidBlobId: u64 = 3;
+    // =================== Error Codes ===================
+    const ENotAuthorized: u64 = 1001;
+    const ESiteNotFound: u64 = 1002;
+    const EPageNotFound: u64 = 1003;
+    const EAlreadyAuthor: u64 = 1004;
+    const ENotAuthor: u64 = 1005;
+    const EInvalidTemplate: u64 = 1006;
+    const EEmptyContent: u64 = 1007;
 
-    // Main CMS Registry - stores all sites
-    struct CMSRegistry has key {
+    // =================== Structs ===================
+
+    /// Admin capability for the entire CMS system
+    public struct AdminCap has key, store {
         id: UID,
-        sites: vector<ID>,
     }
 
-    // Individual CMS Site
-    struct CMSSite has key, store {
-        id: UID,
-        name: String,
-        owner: address,
-        admins: vector<address>,
-        editors: vector<address>,
-        pages: vector<ID>,
-        created_at: u64,
-    }
-
-    // Individual Content Page
-    struct ContentPage has key, store {
+    /// Site owner capability
+    public struct SiteOwnerCap has key, store {
         id: UID,
         site_id: ID,
-        slug: String,
+    }
+
+    /// Main CMS site object
+    public struct CMSSite has key, store {
+        id: UID,
+        name: String,
+        description: String,
+        owner: address,
+        template_id: String,
+        authors: vector<address>,
+        pages: Table<String, ID>, // page_slug -> page_id
+        created_at: u64,
+        updated_at: u64,
+        is_active: bool,
+        walrus_site_id: String, // For Walrus Sites deployment
+    }
+
+    /// Individual content page
+    public struct ContentPage has key, store {
+        id: UID,
+        site_id: ID,
         title: String,
-        blob_id: String, // Walrus blob ID
+        slug: String,
+        content_blob_id: String, // Walrus blob ID
         author: address,
         created_at: u64,
         updated_at: u64,
-        version: u64,
+        is_published: bool,
+        metadata: Bag, // For additional page metadata
     }
 
-    // Page Update Event
-    struct PageUpdated has copy, drop {
-        page_id: ID,
-        site_id: ID,
-        slug: String,
-        blob_id: String,
+    /// Template for site rendering
+    public struct SiteTemplate has key, store {
+        id: UID,
+        name: String,
+        description: String,
+        template_blob_id: String, // Walrus blob ID for template files
+        css_blob_id: String,      // CSS styles blob ID
+        js_blob_id: String,       // JavaScript blob ID (optional)
         author: address,
-        version: u64,
+        is_public: bool,
+        created_at: u64,
     }
 
-    // Site Created Event
-    struct SiteCreated has copy, drop {
+    /// Global CMS registry
+    public struct CMSRegistry has key {
+        id: UID,
+        total_sites: u64,
+        total_pages: u64,
+        total_templates: u64,
+        site_counter: u64,
+        admin: address,
+    }
+
+    // =================== Events ===================
+
+    public struct SiteCreated has copy, drop {
         site_id: ID,
         name: String,
         owner: address,
+        timestamp: u64,
     }
 
-    // Initialize the CMS Registry (called once)
+    public struct PageCreated has copy, drop {
+        page_id: ID,
+        site_id: ID,
+        title: String,
+        author: address,
+        timestamp: u64,
+    }
+
+    public struct PageUpdated has copy, drop {
+        page_id: ID,
+        site_id: ID,
+        author: address,
+        timestamp: u64,
+    }
+
+    public struct AuthorAdded has copy, drop {
+        site_id: ID,
+        author: address,
+        added_by: address,
+        timestamp: u64,
+    }
+
+    public struct AuthorRemoved has copy, drop {
+        site_id: ID,
+        author: address,
+        removed_by: address,
+        timestamp: u64,
+    }
+
+    public struct TemplateCreated has copy, drop {
+        template_id: ID,
+        name: String,
+        author: address,
+        timestamp: u64,
+    }
+
+    // =================== Init Function ===================
+
+    /// Initialize the CMS module
     fun init(ctx: &mut TxContext) {
+        let admin_cap = AdminCap {
+            id: object::new(ctx),
+        };
+
         let registry = CMSRegistry {
             id: object::new(ctx),
-            sites: vector::empty(),
+            total_sites: 0,
+            total_pages: 0,
+            total_templates: 0,
+            site_counter: 0,
+            admin: tx_context::sender(ctx),
         };
+
+        // Transfer admin cap to deployer
+        transfer::transfer(admin_cap, tx_context::sender(ctx));
+        
+        // Share the registry
         transfer::share_object(registry);
     }
 
-    // Create a new CMS site
-    public entry fun create_site(
+    // =================== Admin Functions ===================
+
+    /// Transfer admin capability to new admin
+    public fun transfer_admin_cap(
+        admin_cap: AdminCap,
+        new_admin: address,
+    ) {
+        transfer::transfer(admin_cap, new_admin);
+    }
+
+    /// Update registry admin (only by admin cap holder)
+    public fun update_registry_admin(
+        _admin_cap: &AdminCap,
+        registry: &mut CMSRegistry,
+        new_admin: address,
+    ) {
+        registry.admin = new_admin;
+    }
+
+    // =================== Site Management Functions ===================
+
+    /// Create a new CMS site
+    public fun create_site(
         registry: &mut CMSRegistry,
         name: String,
+        description: String,
+        template_id: String,
+        clock: &Clock,
         ctx: &mut TxContext
-    ) {
+    ): (CMSSite, SiteOwnerCap) {
+        let site_id = object::new(ctx);
+        let site_id_copy = object::uid_to_inner(&site_id);
+        let current_time = clock::timestamp_ms(clock);
+        let sender = tx_context::sender(ctx);
+
         let site = CMSSite {
-            id: object::new(ctx),
+            id: site_id,
             name,
-            owner: tx_context::sender(ctx),
-            admins: vector::singleton(tx_context::sender(ctx)),
-            editors: vector::empty(),
-            pages: vector::empty(),
-            created_at: tx_context::epoch(ctx),
+            description,
+            owner: sender,
+            template_id,
+            authors: vector::empty<address>(),
+            pages: table::new<String, ID>(ctx),
+            created_at: current_time,
+            updated_at: current_time,
+            is_active: true,
+            walrus_site_id: string::utf8(b""), // To be set when deployed
         };
 
-        let site_id = object::id(&site);
-        vector::push_back(&mut registry.sites, site_id);
+        let owner_cap = SiteOwnerCap {
+            id: object::new(ctx),
+            site_id: site_id_copy,
+        };
 
+        // Update registry
+        registry.total_sites = registry.total_sites + 1;
+        registry.site_counter = registry.site_counter + 1;
+
+        // Emit event
         event::emit(SiteCreated {
-            site_id,
-            name,
-            owner: tx_context::sender(ctx),
+            site_id: site_id_copy,
+            name: site.name,
+            owner: sender,
+            timestamp: current_time,
         });
 
-        transfer::share_object(site);
+        (site, owner_cap)
     }
 
-    // Add editor to site
-    public entry fun add_editor(
+    /// Add author to site (only site owner)
+    public fun add_author(
         site: &mut CMSSite,
-        editor: address,
+        _site_owner_cap: &SiteOwnerCap,
+        author_address: address,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
-        assert!(is_admin(site, tx_context::sender(ctx)), ENotAuthorized);
-        vector::push_back(&mut site.editors, editor);
+        assert!(!vector::contains(&site.authors, &author_address), EAlreadyAuthor);
+        
+        vector::push_back(&mut site.authors, author_address);
+        site.updated_at = clock::timestamp_ms(clock);
+
+        event::emit(AuthorAdded {
+            site_id: object::uid_to_inner(&site.id),
+            author: author_address,
+            added_by: tx_context::sender(ctx),
+            timestamp: clock::timestamp_ms(clock),
+        });
     }
 
-    // Create or update a content page
-    public entry fun update_page(
+    /// Remove author from site (only site owner)
+    public fun remove_author(
         site: &mut CMSSite,
-        slug: String,
+        _site_owner_cap: &SiteOwnerCap,
+        author_address: address,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let (found, index) = vector::index_of(&site.authors, &author_address);
+        assert!(found, ENotAuthor);
+        
+        vector::remove(&mut site.authors, index);
+        site.updated_at = clock::timestamp_ms(clock);
+
+        event::emit(AuthorRemoved {
+            site_id: object::uid_to_inner(&site.id),
+            author: author_address,
+            removed_by: tx_context::sender(ctx),
+            timestamp: clock::timestamp_ms(clock),
+        });
+    }
+
+    /// Update site template (only site owner)
+    public fun update_site_template(
+        site: &mut CMSSite,
+        _site_owner_cap: &SiteOwnerCap,
+        new_template_id: String,
+        clock: &Clock,
+    ) {
+        site.template_id = new_template_id;
+        site.updated_at = clock::timestamp_ms(clock);
+    }
+
+    /// Set Walrus site ID after deployment
+    public fun set_walrus_site_id(
+        site: &mut CMSSite,
+        _site_owner_cap: &SiteOwnerCap,
+        walrus_site_id: String,
+        clock: &Clock,
+    ) {
+        site.walrus_site_id = walrus_site_id;
+        site.updated_at = clock::timestamp_ms(clock);
+    }
+
+    // =================== Page Management Functions ===================
+
+    /// Create a new page (only site owner or authorized author)
+    public fun create_page(
+        registry: &mut CMSRegistry,
+        site: &mut CMSSite,
         title: String,
-        blob_id: String,
+        slug: String,
+        content_blob_id: String,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): ContentPage {
+        let sender = tx_context::sender(ctx);
+        
+        // Check authorization
+        assert!(
+            sender == site.owner || vector::contains(&site.authors, &sender),
+            ENotAuthorized
+        );
+
+        // Check if slug already exists
+        assert!(!table::contains(&site.pages, slug), EAlreadyAuthor);
+
+        let page_id = object::new(ctx);
+        let page_id_copy = object::uid_to_inner(&page_id);
+        let current_time = clock::timestamp_ms(clock);
+
+        let page = ContentPage {
+            id: page_id,
+            site_id: object::uid_to_inner(&site.id),
+            title,
+            slug,
+            content_blob_id,
+            author: sender,
+            created_at: current_time,
+            updated_at: current_time,
+            is_published: true,
+            metadata: bag::new(ctx),
+        };
+
+        // Add to site's page registry
+        table::add(&mut site.pages, slug, page_id_copy);
+        site.updated_at = current_time;
+
+        // Update global registry
+        registry.total_pages = registry.total_pages + 1;
+
+        // Emit event
+        event::emit(PageCreated {
+            page_id: page_id_copy,
+            site_id: object::uid_to_inner(&site.id),
+            title: page.title,
+            author: sender,
+            timestamp: current_time,
+        });
+
+        page
+    }
+
+    /// Update page content (only site owner or authorized author)
+    public fun update_page(
+        site: &CMSSite,
+        page: &mut ContentPage,
+        new_content_blob_id: String,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
         let sender = tx_context::sender(ctx);
-        assert!(can_edit(site, sender), ENotAuthorized);
-        assert!(!string::is_empty(&blob_id), EInvalidBlobId);
-
-        // Check if page exists
-        let page_exists = false;
-        let page_index = 0;
-        let i = 0;
         
-        // Find existing page by slug (simplified for demo)
-        // In production, you'd want a more efficient lookup
-        
-        let page = ContentPage {
-            id: object::new(ctx),
-            site_id: object::id(site),
-            slug,
-            title,
-            blob_id,
-            author: sender,
-            created_at: tx_context::epoch(ctx),
-            updated_at: tx_context::epoch(ctx),
-            version: 1,
-        };
+        // Check authorization
+        assert!(
+            sender == site.owner || vector::contains(&site.authors, &sender),
+            ENotAuthorized
+        );
 
-        let page_id = object::id(&page);
-        vector::push_back(&mut site.pages, page_id);
+        page.content_blob_id = new_content_blob_id;
+        page.updated_at = clock::timestamp_ms(clock);
 
         event::emit(PageUpdated {
-            page_id,
-            site_id: object::id(site),
-            slug: page.slug,
-            blob_id: page.blob_id,
+            page_id: object::uid_to_inner(&page.id),
+            site_id: page.site_id,
             author: sender,
-            version: page.version,
+            timestamp: clock::timestamp_ms(clock),
+        });
+    }
+
+    /// Update page title and slug (only site owner or authorized author)
+    public fun update_page_metadata(
+        site: &mut CMSSite,
+        page: &mut ContentPage,
+        new_title: String,
+        new_slug: String,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Check authorization
+        assert!(
+            sender == site.owner || vector::contains(&site.authors, &sender),
+            ENotAuthorized
+        );
+
+        // Remove old slug and add new one
+        table::remove(&mut site.pages, page.slug);
+        table::add(&mut site.pages, new_slug, object::uid_to_inner(&page.id));
+
+        page.title = new_title;
+        page.slug = new_slug;
+        page.updated_at = clock::timestamp_ms(clock);
+    }
+
+    /// Toggle page published status
+    public fun toggle_page_published(
+        site: &CMSSite,
+        page: &mut ContentPage,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        
+        // Check authorization
+        assert!(
+            sender == site.owner || vector::contains(&site.authors, &sender),
+            ENotAuthorized
+        );
+
+        page.is_published = !page.is_published;
+        page.updated_at = clock::timestamp_ms(clock);
+    }
+
+    // =================== Template Management Functions ===================
+
+    /// Create a new site template
+    public fun create_template(
+        registry: &mut CMSRegistry,
+        name: String,
+        description: String,
+        template_blob_id: String,
+        css_blob_id: String,
+        js_blob_id: String,
+        is_public: bool,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): SiteTemplate {
+        let template_id = object::new(ctx);
+        let template_id_copy = object::uid_to_inner(&template_id);
+        let current_time = clock::timestamp_ms(clock);
+        let sender = tx_context::sender(ctx);
+
+        let template = SiteTemplate {
+            id: template_id,
+            name,
+            description,
+            template_blob_id,
+            css_blob_id,
+            js_blob_id,
+            author: sender,
+            is_public,
+            created_at: current_time,
+        };
+
+        // Update registry
+        registry.total_templates = registry.total_templates + 1;
+
+        // Emit event
+        event::emit(TemplateCreated {
+            template_id: template_id_copy,
+            name: template.name,
+            author: sender,
+            timestamp: current_time,
         });
 
-        transfer::share_object(page);
+        template
     }
 
-    // Helper function to check if user is admin
-    fun is_admin(site: &CMSSite, user: address): bool {
-        site.owner == user || vector::contains(&site.admins, &user)
+    // =================== View Functions ===================
+
+    /// Check if address is authorized for site
+    public fun is_authorized(site: &CMSSite, author: address): bool {
+        author == site.owner || vector::contains(&site.authors, &author)
     }
 
-    // Helper function to check if user can edit
-    fun can_edit(site: &CMSSite, user: address): bool {
-        is_admin(site, user) || vector::contains(&site.editors, &user)
+    /// Get site info
+    public fun get_site_info(site: &CMSSite): (String, String, address, String, u64, u64, bool) {
+        (
+            site.name,
+            site.description, 
+            site.owner,
+            site.template_id,
+            site.created_at,
+            site.updated_at,
+            site.is_active
+        )
     }
 
-    // Getter functions
-    public fun get_site_name(site: &CMSSite): String {
-        site.name
+    /// Get page info
+    public fun get_page_info(page: &ContentPage): (String, String, String, address, u64, u64, bool) {
+        (
+            page.title,
+            page.slug,
+            page.content_blob_id,
+            page.author,
+            page.created_at,
+            page.updated_at,
+            page.is_published
+        )
     }
 
-    public fun get_site_owner(site: &CMSSite): address {
-        site.owner
+    /// Get template info
+    public fun get_template_info(template: &SiteTemplate): (String, String, String, String, String, address, bool) {
+        (
+            template.name,
+            template.description,
+            template.template_blob_id,
+            template.css_blob_id,
+            template.js_blob_id,
+            template.author,
+            template.is_public
+        )
     }
 
-    public fun get_page_blob_id(page: &ContentPage): String {
-        page.blob_id
+    /// Get registry stats
+    public fun get_registry_stats(registry: &CMSRegistry): (u64, u64, u64, address) {
+        (
+            registry.total_sites,
+            registry.total_pages,
+            registry.total_templates,
+            registry.admin
+        )
     }
 
-    public fun get_page_title(page: &ContentPage): String {
-        page.title
+    // =================== Helper Functions ===================
+
+    /// Get site authors list
+    public fun get_site_authors(site: &CMSSite): vector<address> {
+        site.authors
     }
 
-    public fun get_page_slug(page: &ContentPage): String {
-        page.slug
+    /// Get number of pages in site
+    public fun get_page_count(site: &CMSSite): u64 {
+        table::length(&site.pages)
+    }
+    
+    /// Suspend/unsuspend site (admin only)
+    public fun toggle_site_suspension(
+        _admin_cap: &AdminCap,
+        site: &mut CMSSite,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        site.is_active = !site.is_active;
+        site.updated_at = clock::timestamp_ms(clock);
+
+        event::emit(SiteSuspended {
+            site_id: object::uid_to_inner(&site.id),
+            is_active: site.is_active,
+            admin: tx_context::sender(ctx),
+            timestamp: clock::timestamp_ms(clock),
+        });
+    }
+
+    /// Force update site content (admin emergency override)
+    public fun admin_emergency_update_site(
+        _admin_cap: &AdminCap,
+        site: &mut CMSSite,
+        new_name: String,
+        new_description: String,
+        reason: String,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        site.name = new_name;
+        site.description = new_description;
+        site.updated_at = clock::timestamp_ms(clock);
+
+        event::emit(AdminEmergencyUpdate {
+            site_id: object::uid_to_inner(&site.id),
+            admin: tx_context::sender(ctx),
+            reason,
+            timestamp: clock::timestamp_ms(clock),
+        });
     }
 }
