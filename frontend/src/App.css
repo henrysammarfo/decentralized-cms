@@ -1,65 +1,42 @@
-/* frontend/src/App.css */
-@import '@mysten/dapp-kit/dist/index.css';
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
-
-/* Custom styles */
-.markdown-editor {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
 }
 
-.markdown-preview {
-  line-height: 1.6;
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
 }
 
-.markdown-preview h1 {
-  @apply text-3xl font-bold mt-6 mb-4;
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.markdown-preview h2 {
-  @apply text-2xl font-bold mt-5 mb-3;
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
 }
 
-.markdown-preview h3 {
-  @apply text-xl font-bold mt-4 mb-2;
+.card {
+  padding: 2em;
 }
 
-.markdown-preview p {
-  @apply mb-4;
-}
-
-.markdown-preview ul, .markdown-preview ol {
-  @apply mb-4 ml-6;
-}
-
-.markdown-preview li {
-  @apply mb-1;
-}
-
-.markdown-preview code {
-  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
-}
-
-.markdown-preview pre {
-  @apply bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4;
-}
-
-.markdown-preview blockquote {
-  @apply border-l-4 border-gray-300 pl-4 italic mb-4;
-}
-
-/* Loading spinner */
-.spinner {
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #3498db;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.read-the-docs {
+  color: #888;
 }
