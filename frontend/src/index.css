@@ -1,65 +1,68 @@
-/* frontend/src/index.css */
-@import '@mysten/dapp-kit/dist/index.css';
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
 
-/* Custom styles */
-.markdown-editor {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.markdown-preview {
-  line-height: 1.6;
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
 }
 
-.markdown-preview h1 {
-  @apply text-3xl font-bold mt-6 mb-4;
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
 }
 
-.markdown-preview h2 {
-  @apply text-2xl font-bold mt-5 mb-3;
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
 }
 
-.markdown-preview h3 {
-  @apply text-xl font-bold mt-4 mb-2;
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
 }
 
-.markdown-preview p {
-  @apply mb-4;
-}
-
-.markdown-preview ul, .markdown-preview ol {
-  @apply mb-4 ml-6;
-}
-
-.markdown-preview li {
-  @apply mb-1;
-}
-
-.markdown-preview code {
-  @apply bg-gray-100 px-1 py-0.5 rounded text-sm;
-}
-
-.markdown-preview pre {
-  @apply bg-gray-100 p-4 rounded-lg overflow-x-auto mb-4;
-}
-
-.markdown-preview blockquote {
-  @apply border-l-4 border-gray-300 pl-4 italic mb-4;
-}
-
-/* Loading spinner */
-.spinner {
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #3498db;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
 }
