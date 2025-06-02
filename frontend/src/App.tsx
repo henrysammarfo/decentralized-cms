@@ -1,20 +1,24 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import DashboardPage from './pages/DashboardPage'
-import EditorPage from './pages/EditorPage'
+import { SuiProviders } from '@/services/sui';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import DashboardPage from '@/pages/DashboardPage'; // Default import
+import EditorPage from '@/pages/EditorPage';       // Default import
+import HomePage from '@/pages/HomePage';           // Default import
+import SitePage from '@/pages/SitePage';           // Default import
 
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-50">
+    <SuiProviders>
+      <Router>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/editor" element={<EditorPage />} />
+          <Route path="/site/:siteId" element={<SitePage />} />
+          <Route path="/site/:siteId/:pageSlug" element={<SitePage />} />
         </Routes>
-      </div>
-    </Router>
-  )
+      </Router>
+    </SuiProviders>
+  );
 }
 
-export default App
+export default App;
